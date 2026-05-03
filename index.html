@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Profiler — Найди, где твой код сжигает деньги</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        dark: {
+                            900: '#0a0a0f',
+                            800: '#12121a',
+                            700: '#1a1a2e',
+                            600: '#252542',
+                        },
+                        accent: {
+                            green: '#00ff88',
+                            red: '#ff3366',
+                            blue: '#00ccff',
+                            yellow: '#ffcc00',
+                            purple: '#9945ff',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'slide-up': 'slideUp 0.6s ease-out forwards',
+                        'count-up': 'countUp 2s ease-out forwards',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 20px rgba(0,255,136,0.3)' },
+                            '100%': { boxShadow: '0 0 40px rgba(0,255,136,0.6)' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(30px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        countUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: #0a0a0f;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #00ff88 0%, #00ccff 50%, #9945ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .gradient-border {
+            position: relative;
+            background: #12121a;
+            border-radius: 16px;
+        }
+        
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 16px;
+            padding: 1px;
+            background: linear-gradient(135deg, #00ff88, #00ccff, #9945ff);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0.5;
+        }
+        
+        .glass {
+            background: rgba(18, 18, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .code-block {
+            background: #0d0d15;
+            border: 1px solid rgba(0,255,136,0.2);
+            border-radius: 12px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .terminal-line {
+            position: relative;
+            padding-left: 20px;
+        }
+        
+        .terminal-line::before {
+            content: '$';
+            position: absolute;
+            left: 0;
+            color: #00ff88;
+        }
+        
+        .grid-bg {
+            background-image: 
+                linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+        
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        
+        .counter {
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,255,136,0.1);
+        }
+        
+        .tab-active {
+            background: linear-gradient(135deg, rgba(0,255,136,0.2), rgba(0,204,255,0.2));
+            border: 1px solid rgba(0,255,136,0.4);
+        }
+        
+        .scroll-reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s ease-out;
+        }
+        
+        .scroll-reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .money-pulse {
+            animation: moneyPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes moneyPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s step-end infinite;
+            color: #00ff88;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="font-sans antialiased">
+    <!-- Background Orbs -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="orb w-96 h-96 bg-accent-green top-0 left-1/4"></div>
+        <div class="orb w-80 h-80 bg-accent-purple top-1/3 right-1/4"></div>
+        <div class="orb w-72 h-72 bg-accent-blue bottom-1/4 left-1/3"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 glass border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-green to-accent-blue flex items-center justify-center">
+                    <i data-lucide="flame" class="w-5 h-5 text-dark-900"></i>
+                </div>
+                <span class="text-xl font-bold tracking-tight">Cost<span class="text-accent-green">Profiler</span></span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+                <a href="#how-it-works" class="hover:text-white transition-colors">Как работает</a>
+                <a href="#features" class="hover:text-white transition-colors">Возможности</a>
+                <a href="#demo" class="hover:text-white transition-colors">Демо</a>
+                <a href="#roi" class="hover:text-white transition-colors">ROI</a>
+                <a href="#faq" class="hover:text-white transition-colors">FAQ</a>
+            </div>
+            <a href="https://github.com/karamik/CostProfiler" target="_blank" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-green to-accent-blue text-dark-900 font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2">
+                <i data-lucide="github" class="w-4 h-4"></i>
+                GitHub
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen flex items-center justify-center pt-20 grid-bg">
+        <div class="max-w-7xl mx-auto px-6 py-20 text-center relative z-10">
+            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-green/10 border border-accent-green/30 text-accent-green text-sm font-medium mb-8 scroll-reveal">
+                <span class="w-2 h-2 rounded-full bg-accent-green animate-pulse"></span>
+                Apache 2.0 • Open Source
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl lg:text-8xl font-black leading-tight mb-8 scroll-reveal" style="transition-delay: 0.1s">
+                Ваш код ест<br>
+                <span class="gradient-text">миллиард в год</span>
+            </h1>
+            
+            <p class="text-xl md:text-2xl text-gray-400 max-w-3xl mx-auto mb-12 scroll-reveal" style="transition-delay: 0.2s">
+                Мы покажем, <span class="text-white font-semibold">какая именно строчка кода</span> виновата. 
+                Без изменений в коде. Без перезапуска сервисов. Через 30 секунд после запуска.
+            </p>
+
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 scroll-reveal" style="transition-delay: 0.3s">
+                <a href="https://github.com/karamik/CostProfiler" target="_blank" class="group px-8 py-4 rounded-2xl bg-gradient-to-r from-accent-green to-accent-blue text-dark-900 font-bold text-lg hover:shadow-lg hover:shadow-accent-green/25 transition-all flex items-center gap-2">
+                    <i data-lucide="github" class="w-5 h-5"></i>
+                    Склонировать с GitHub
+                </a>
+                <a href="#demo" class="px-8 py-4 rounded-2xl border border-white/20 text-white font-semibold text-lg hover:bg-white/5 transition-all flex items-center gap-2">
+                    <i data-lucide="play" class="w-5 h-5"></i>
+                    Смотреть демо
+                </a>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto scroll-reveal" style="transition-delay: 0.4s">
+                <div class="glass rounded-2xl p-6 text-center">
+                    <div class="text-4xl font-black text-accent-green mb-2">
+                        <span class="counter" data-target="2000">0</span>%+
+                    </div>
+                    <div class="text-gray-400 text-sm">ROI за первый месяц</div>
+                </div>
+                <div class="glass rounded-2xl p-6 text-center">
+                    <div class="text-4xl font-black text-accent-blue mb-2">
+                        <span class="counter" data-target="500">0</span> млн ₽
+                    </div>
+                    <div class="text-gray-400 text-sm">Экономия в год</div>
+                </div>
+                <div class="glass rounded-2xl p-6 text-center">
+                    <div class="text-4xl font-black text-accent-purple mb-2">
+                        &lt;<span class="counter" data-target="0.5">0</span>%
+                    </div>
+                    <div class="text-gray-400 text-sm">Оверхед на production</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="py-24 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Одна цифра, от которой<br><span class="text-accent-red">заболит голова</span>
+                </h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">
+                    Вы тратите сотни миллионов рублей в год на лишнее «железо». 
+                    Причина — неэффективный код в логистических алгоритмах.
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                <div class="glass rounded-2xl p-8 border-l-4 border-red-500 scroll-reveal">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                            <i data-lucide="x-circle" class="w-5 h-5 text-red-500"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-red-400">Было</h3>
+                    </div>
+                    <ul class="space-y-3 text-gray-400">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="minus" class="w-4 h-4 mt-1 text-red-500/50"></i>
+                            «Говорят, код работает медленно. Данных нет»
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="minus" class="w-4 h-4 mt-1 text-red-500/50"></i>
+                            FinOps видит только счета от облака
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="minus" class="w-4 h-4 mt-1 text-red-500/50"></i>
+                            Оптимизация вслепую и методом тыка
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="minus" class="w-4 h-4 mt-1 text-red-500/50"></i>
+                            Полгода согласования изменений в ядре логистики
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="glass rounded-2xl p-8 border-l-4 border-accent-green scroll-reveal" style="transition-delay: 0.2s">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-accent-green/20 flex items-center justify-center">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-accent-green"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-accent-green">Стало</h3>
+                    </div>
+                    <ul class="space-y-3 text-gray-300">
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="arrow-right" class="w-4 h-4 mt-1 text-accent-green"></i>
+                            «Иванов, твой коммит от 3 мая стоит 2 млн ₽ в неделю»
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="arrow-right" class="w-4 h-4 mt-1 text-accent-green"></i>
+                            FinOps видит функцию → разработчика → строчку кода
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="arrow-right" class="w-4 h-4 mt-1 text-accent-green"></i>
+                            Хирургическое удаление затрат
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <i data-lucide="arrow-right" class="w-4 h-4 mt-1 text-accent-green"></i>
+                            eBPF работает без изменений, прямо сейчас
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-24 relative grid-bg">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-blue/10 border border-accent-blue/30 text-accent-blue text-sm font-medium mb-6">
+                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                    Технология
+                </div>
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Как это работает<br><span class="gradient-text">без изменения кода</span>
+                </h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">
+                    eBPF-агент подсаживается к ядру Linux и считает CPU cycles для каждой функции
+                </p>
+            </div>
+
+            <!-- Architecture Diagram -->
+            <div class="max-w-5xl mx-auto mb-16 scroll-reveal">
+                <div class="glass rounded-3xl p-8 md:p-12">
+                    <div class="grid md:grid-cols-3 gap-6">
+                        <!-- App Layer -->
+                        <div class="relative">
+                            <div class="gradient-border p-6 rounded-2xl h-full">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-8 h-8 rounded-lg bg-accent-purple/20 flex items-center justify-center">
+                                        <i data-lucide="box" class="w-4 h-4 text-accent-purple"></i>
+                                    </div>
+                                    <h3 class="font-bold text-white">Приложение</h3>
+                                </div>
+                                <div class="code-block p-4 text-xs text-gray-400">
+                                    <div class="text-accent-purple mb-2">// Логистический сервис</div>
+                                    <div>func SlowRoute() {</div>
+                                    <div class="pl-4 text-accent-red">for i := 0; i &lt; 1e7; i++ {</div>
+                                    <div class="pl-8 text-gray-500">// legacy code</div>
+                                    <div class="pl-4 text-accent-red">}</div>
+                                    <div>}</div>
+                                </div>
+                            </div>
+                            <div class="hidden md:flex absolute -right-3 top-1/2 transform -translate-y-1/2 z-10">
+                                <i data-lucide="arrow-right" class="w-6 h-6 text-accent-green"></i>
+                            </div>
+                        </div>
+
+                        <!-- eBPF Layer -->
+                        <div class="relative">
+                            <div class="gradient-border p-6 rounded-2xl h-full border-accent-green/50">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-8 h-8 rounded-lg bg-accent-green/20 flex items-center justify-center">
+                                        <i data-lucide="activity" class="w-4 h-4 text-accent-green"></i>
+                                    </div>
+                                    <h3 class="font-bold text-accent-green">eBPF Agent</h3>
+                                </div>
+                                <div class="space-y-3 text-sm">
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="check" class="w-4 h-4 text-accent-green"></i>
+                                        uprobe / uretprobe
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="check" class="w-4 h-4 text-accent-green"></i>
+                                        Счётчик CPU cycles
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="check" class="w-4 h-4 text-accent-green"></i>
+                                        Динамический семплинг
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="check" class="w-4 h-4 text-accent-green"></i>
+                                        Оверхед &lt;0.5%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="hidden md:flex absolute -right-3 top-1/2 transform -translate-y-1/2 z-10">
+                                <i data-lucide="arrow-right" class="w-6 h-6 text-accent-blue"></i>
+                            </div>
+                        </div>
+
+                        <!-- FinOps Layer -->
+                        <div>
+                            <div class="gradient-border p-6 rounded-2xl h-full">
+                                <div class="flex items-center gap-3 mb-4">
+                                    <div class="w-8 h-8 rounded-lg bg-accent-blue/20 flex items-center justify-center">
+                                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-accent-blue"></i>
+                                    </div>
+                                    <h3 class="font-bold text-white">FinOps Pipeline</h3>
+                                </div>
+                                <div class="space-y-3 text-sm">
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="database" class="w-4 h-4 text-accent-blue"></i>
+                                        ClickHouse
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="pie-chart" class="w-4 h-4 text-accent-blue"></i>
+                                        Grafana Dashboards
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="bell" class="w-4 h-4 text-accent-blue"></i>
+                                        Алерты в Jira
+                                    </div>
+                                    <div class="flex items-center gap-2 text-gray-300">
+                                        <i data-lucide="git-pull-request" class="w-4 h-4 text-accent-blue"></i>
+                                        GitHub Actions
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Fact -->
+            <div class="max-w-3xl mx-auto text-center scroll-reveal">
+                <div class="glass rounded-2xl p-8 border border-accent-yellow/30">
+                    <div class="flex items-center justify-center gap-3 mb-4">
+                        <i data-lucide="lightbulb" class="w-6 h-6 text-accent-yellow"></i>
+                        <span class="text-accent-yellow font-bold text-lg">Ключевой факт</span>
+                    </div>
+                    <p class="text-xl text-gray-300">
+                        Мы не просим доступ к вашему коду. Мы не требуем перезапуска сервисов.<br>
+                        <span class="text-white font-semibold">Мы просто наблюдаем и считаем деньги.</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="py-24 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-green/10 border border-accent-green/30 text-accent-green text-sm font-medium mb-6">
+                    <i data-lucide="terminal" class="w-4 h-4"></i>
+                    Демо
+                </div>
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    30 секунд, чтобы <span class="gradient-text">увидеть свои деньги</span>
+                </h2>
+            </div>
+
+            <div class="max-w-4xl mx-auto scroll-reveal">
+                <div class="code-block p-6 md:p-8 rounded-2xl">
+                    <div class="flex items-center gap-2 mb-6">
+                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                        <span class="ml-4 text-sm text-gray-500">bash — cost-profiler demo</span>
+                    </div>
+                    
+                    <div class="space-y-2 text-sm md:text-base">
+                        <div class="terminal-line text-gray-400">git clone https://github.com/karamik/CostProfiler</div>
+                        <div class="terminal-line text-gray-400">cd cost-profiler && ./run_demo.sh</div>
+                        <div class="text-gray-600 my-4">---</div>
+                        <div class="text-accent-green">🔍 Attaching uprobe to SlowRouteOptimization at 0x4a2b10</div>
+                        <div class="text-accent-green">✅ eBPF agent attached to PID 27182</div>
+                        <div class="text-gray-600 my-4">---</div>
+                        <div class="text-accent-yellow font-bold">💰 FINOPS CALCULATION (scale: 100M calls/day, 2 ₽/vCPU·ч)</div>
+                        <div class="text-gray-600 my-2">---</div>
+                        <div class="grid grid-cols-2 gap-4 max-w-lg">
+                            <div class="text-gray-400">SlowRouteOptimization</div>
+                            <div class="text-accent-red font-bold">843.2 млн ₽/год</div>
+                            <div class="text-gray-400">VerySlowRouteOptimization</div>
+                            <div class="text-accent-red font-bold">94.1 млн ₽/год</div>
+                            <div class="text-gray-400">FastRouteOptimization</div>
+                            <div class="text-accent-green font-bold">36.5 млн ₽/год</div>
+                        </div>
+                        <div class="text-gray-600 my-2">---</div>
+                        <div class="text-accent-red font-black text-lg">TOTAL WASTE: 973.8 млн ₽/год (!!!)</div>
+                        <div class="text-gray-600 my-4">---</div>
+                        <div class="text-accent-yellow">⚠️ РЕКОМЕНДАЦИЯ:</div>
+                        <div class="text-gray-300 pl-4">• SlowRouteOptimization: убрать O(n²) в строке 47</div>
+                        <div class="text-gray-300 pl-4">• Preallocate slices (потенциал ~800 млн/год)</div>
+                    </div>
+                </div>
+
+                <div class="mt-8 text-center">
+                    <p class="text-gray-400 text-lg">
+                        <span class="text-accent-green font-bold">Три секунды</span> — и вы знаете, где лежат ваши деньги.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="py-24 relative grid-bg">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Что вы получаете <span class="gradient-text">прямо сейчас</span>
+                </h2>
+                <p class="text-xl text-gray-400">Open Source, Apache 2.0, код открыт</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="feature-card glass rounded-2xl p-6 scroll-reveal">
+                    <div class="w-12 h-12 rounded-xl bg-accent-green/20 flex items-center justify-center mb-4">
+                        <i data-lucide="crosshair" class="w-6 h-6 text-accent-green"></i>
+                    </div>
+                    <h3 class="font-bold text-lg mb-2">eBPF-агент</h3>
+                    <p class="text-gray-400 text-sm">Ловит вызовы функций, считает CPU cycles и переводит в рубли</p>
+                </div>
+
+                <div class="feature-card glass rounded-2xl p-6 scroll-reveal" style="transition-delay: 0.1s">
+                    <div class="w-12 h-12 rounded-xl bg-accent-blue/20 flex items-center justify-center mb-4">
+                        <i data-lucide="file-text" class="w-6 h-6 text-accent-blue"></i>
+                    </div>
+                    <h3 class="font-bold text-lg mb-2">CLI-отчёт</h3>
+                    <p class="text-gray-400 text-sm">«Cost per function» — топ самых дорогих функций в вашем коде</p>
+                </div>
+
+                <div class="feature-card glass rounded-2xl p-6 scroll-reveal" style="transition-delay: 0.2s">
+                    <div class="w-12 h-12 rounded-xl bg-accent-purple/20 flex items-center justify-center mb-4">
+                        <i data-lucide="git-branch" class="w-6 h-6 text-accent-purple"></i>
+                    </div>
+                    <h3 class="font-bold text-lg mb-2">GitHub Actions</h3>
+                    <p class="text-gray-400 text-sm">FinOps-проверка на каждый PR — не пропустит дорогой код</p>
+                </div>
+
+                <div class="feature-card glass rounded-2xl p-6 scroll-reveal" style="transition-delay: 0.3s">
+                    <div class="w-12 h-12 rounded-xl bg-accent-yellow/20 flex items-center justify-center mb-4">
+                        <i data-lucide="monitor-play" class="w-6 h-6 text-accent-yellow"></i>
+                    </div>
+                    <h3 class="font-bold text-lg mb-2">Демо-стенд</h3>
+                    <p class="text-gray-400 text-sm">Запускается за 30 секунд, показывает магию чисел</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI Section -->
+    <section id="roi" class="py-24 relative">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent-yellow/10 border border-accent-yellow/30 text-accent-yellow text-sm font-medium mb-6">
+                    <i data-lucide="trending-up" class="w-4 h-4"></i>
+                    Экономика
+                </div>
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Цифры, которые любит<br><span class="gradient-text">ваш финдиректор</span>
+                </h2>
+            </div>
+
+            <div class="max-w-4xl mx-auto">
+                <div class="glass rounded-3xl p-8 md:p-12 scroll-reveal">
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="space-y-6">
+                            <div class="flex items-center justify-between p-4 rounded-xl bg-dark-800">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-accent-green/20 flex items-center justify-center">
+                                        <i data-lucide="search" class="w-5 h-5 text-accent-green"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm text-gray-400">Найденные неоптимальности</div>
+                                        <div class="text-xs text-gray-500">консервативно</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-black text-accent-green">300–500 млн ₽/год</div>
+                            </div>
+
+                            <div class="flex items-center justify-between p-4 rounded-xl bg-dark-800">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-accent-blue/20 flex items-center justify-center">
+                                        <i data-lucide="server" class="w-5 h-5 text-accent-blue"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm text-gray-400">Экономия на серверах</div>
+                                        <div class="text-xs text-gray-500">железо + облако</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-black text-accent-blue">150–200 млн ₽/год</div>
+                            </div>
+
+                            <div class="flex items-center justify-between p-4 rounded-xl bg-dark-800">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-accent-purple/20 flex items-center justify-center">
+                                        <i data-lucide="zap" class="w-5 h-5 text-accent-purple"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm text-gray-400">Ускорение расчётов</div>
+                                        <div class="text-xs text-gray-500">пропускная способность</div>
+                                    </div>
+                                </div>
+                                <div class="text-2xl font-black text-accent-purple">+15%</div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col justify-center">
+                            <div class="gradient-border p-8 rounded-2xl text-center">
+                                <div class="text-sm text-gray-400 mb-2">Стоимость Enterprise (3 года)</div>
+                                <div class="text-3xl font-black text-white mb-6">25 млн ₽</div>
+                                
+                                <div class="text-sm text-gray-400 mb-2">ROI</div>
+                                <div class="text-6xl font-black gradient-text money-pulse">2000%+</div>
+                                <div class="text-sm text-gray-400 mt-2">за первый месяц</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-24 relative grid-bg">
+        <div class="max-w-4xl mx-auto px-6">
+            <div class="text-center mb-16 scroll-reveal">
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Ответы на <span class="gradient-text">возражения</span>
+                </h2>
+                <p class="text-xl text-gray-400">Мы всё продумали</p>
+            </div>
+
+            <div class="space-y-4">
+                <div class="glass rounded-2xl overflow-hidden scroll-reveal">
+                    <button class="faq-toggle w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                            </div>
+                            <span class="font-semibold text-lg">Go инлайнит мелкие функции, uprobe их не увидит</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 faq-icon transition-transform"></i>
+                    </button>
+                    <div class="faq-content hidden px-6 pb-6 pl-18">
+                        <div class="ml-12 p-4 rounded-xl bg-accent-green/10 border border-accent-green/30">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i data-lucide="check" class="w-5 h-5 text-accent-green"></i>
+                                <span class="font-bold text-accent-green">Решение</span>
+                            </div>
+                            <p class="text-gray-300">Мы фокусируемся на крупных логистических блоках и интерфейсах, которые Go не инлайнит. Для критических участков достаточно добавить <code class="bg-dark-800 px-2 py-1 rounded text-accent-green">//go:noinline</code> — ничтожная цена за возможность экономить миллионы. 80% затрат лежит в 20% больших функций.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl overflow-hidden scroll-reveal" style="transition-delay: 0.1s">
+                    <button class="faq-toggle w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                            </div>
+                            <span class="font-semibold text-lg">Uprobes дают оверхед на миллионах вызовов в секунду</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 faq-icon transition-transform"></i>
+                    </button>
+                    <div class="faq-content hidden px-6 pb-6">
+                        <div class="ml-12 p-4 rounded-xl bg-accent-green/10 border border-accent-green/30">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i data-lucide="check" class="w-5 h-5 text-accent-green"></i>
+                                <span class="font-bold text-accent-green">Решение</span>
+                            </div>
+                            <p class="text-gray-300">Динамический семплинг — мониторим каждый 100-й или 1000-й вызов. Оверхед &lt;0.1% CPU, статистическая точность &gt;95%. Как счётчик Гейгера: щёлкает не каждый распад, но общую картину видит идеально.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl overflow-hidden scroll-reveal" style="transition-delay: 0.2s">
+                    <button class="faq-toggle w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                            </div>
+                            <span class="font-semibold text-lg">Разнородный стек: Go, Java, Python, 1С</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 faq-icon transition-transform"></i>
+                    </button>
+                    <div class="faq-content hidden px-6 pb-6">
+                        <div class="ml-12 p-4 rounded-xl bg-accent-green/10 border border-accent-green/30">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i data-lucide="check" class="w-5 h-5 text-accent-green"></i>
+                                <span class="font-bold text-accent-green">Решение</span>
+                            </div>
+                            <p class="text-gray-300">eBPF работает на уровне бинарника и ядра — язык не важен. Для 1С предоставляем адаптер через strace + парсинг RPC. 90% денег сжигают компилируемые языки — с них и начнём.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass rounded-2xl overflow-hidden scroll-reveal" style="transition-delay: 0.3s">
+                    <button class="faq-toggle w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <i data-lucide="x" class="w-4 h-4 text-red-500"></i>
+                            </div>
+                            <span class="font-semibold text-lg">Нельзя ставить непроверенный софт на прод</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 faq-icon transition-transform"></i>
+                    </button>
+                    <div class="faq-content hidden px-6 pb-6">
+                        <div class="ml-12 p-4 rounded-xl bg-accent-green/10 border border-accent-green/30">
+                            <div class="flex items-center gap-2 mb-2">
+                                <i data-lucide="check" class="w-5 h-5 text-accent-green"></i>
+                                <span class="font-bold text-accent-green">Решение</span>
+                            </div>
+                            <p class="text-gray-300">1) Единый статически скомпилированный бинарник — никаких зависимостей, только libc.<br>2) Предоставим SBOM и результаты пентеста для Security Review.<br>3) Пилот запускается на 2 небоевых контурах — вы сами видите результат без рисков.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section id="start" class="py-24 relative">
+        <div class="max-w-4xl mx-auto px-6 text-center scroll-reveal">
+            <div class="gradient-border p-12 rounded-3xl">
+                <h2 class="text-4xl md:text-5xl font-black mb-6">
+                    Ни один миллион не должен<br><span class="gradient-text">умирать в цикле for</span>
+                </h2>
+                <p class="text-xl text-gray-400 mb-8">
+                    Склонируйте репозиторий, запустите демо за 30 секунд, увидьте свои потери.
+                </p>
+                
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+                    <a href="https://github.com/karamik/CostProfiler" target="_blank" class="group px-8 py-4 rounded-2xl bg-gradient-to-r from-accent-green to-accent-blue text-dark-900 font-bold text-lg hover:shadow-lg hover:shadow-accent-green/25 transition-all flex items-center gap-2">
+                        <i data-lucide="github" class="w-5 h-5"></i>
+                        Склонировать с GitHub
+                    </a>
+                    <a href="mailto:totalprotocol@proton.me" class="px-8 py-4 rounded-2xl border border-white/20 text-white font-semibold text-lg hover:bg-white/5 transition-all flex items-center gap-2">
+                        <i data-lucide="mail" class="w-5 h-5"></i>
+                        Enterprise запрос
+                    </a>
+                </div>
+
+                <div class="flex items-center justify-center gap-6 text-sm text-gray-500">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-accent-green"></i>
+                        Apache 2.0
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="lock" class="w-4 h-4 text-accent-green"></i>
+                        Security Review ready
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="headphones" class="w-4 h-4 text-accent-green"></i>
+                        Поддержка 24/7
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5 py-12">
+        <div class="max-w-7xl mx-auto px-6">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-green to-accent-blue flex items-center justify-center">
+                        <i data-lucide="flame" class="w-4 h-4 text-dark-900"></i>
+                    </div>
+                    <span class="font-bold">Cost<span class="text-accent-green">Profiler</span></span>
+                </div>
+                
+                <div class="flex items-center gap-6 text-sm text-gray-400">
+                    <a href="https://github.com/karamik/CostProfiler" target="_blank" class="hover:text-white transition-colors">GitHub</a>
+                    <a href="#" class="hover:text-white transition-colors">Документация</a>
+                    <a href="#" class="hover:text-white transition-colors">Демо</a>
+                    <a href="mailto:totalprotocol@proton.me" class="hover:text-white transition-colors">Контакты</a>
+                </div>
+                
+                <div class="text-sm text-gray-500">
+                    © 2026 X5 Cost Profiler
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Scroll reveal animation
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    
+                    // Trigger counter animation
+                    const counters = entry.target.querySelectorAll('.counter');
+                    counters.forEach(counter => {
+                        const target = parseFloat(counter.getAttribute('data-target'));
+                        const duration = 2000;
+                        const start = performance.now();
+                        
+                        function update(currentTime) {
+                            const elapsed = currentTime - start;
+                            const progress = Math.min(elapsed / duration, 1);
+                            const easeOut = 1 - Math.pow(1 - progress, 3);
+                            
+                            if (target < 1) {
+                                counter.textContent = (target * easeOut).toFixed(1);
+                            } else {
+                                counter.textContent = Math.floor(target * easeOut);
+                            }
+                            
+                            if (progress < 1) {
+                                requestAnimationFrame(update);
+                            }
+                        }
+                        
+                        requestAnimationFrame(update);
+                    });
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+
+        // FAQ Accordion
+        document.querySelectorAll('.faq-toggle').forEach(button => {
+            button.addEventListener('click', () => {
+                const content = button.nextElementSibling;
+                const icon = button.querySelector('.faq-icon');
+                
+                content.classList.toggle('hidden');
+                icon.style.transform = content.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+            });
+        });
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

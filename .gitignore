@@ -1,0 +1,102 @@
+# Binaries and compiled files
+logistics-service
+cost-profiler
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go specific
+*.o
+*.a
+*.mod
+*.sum
+go.work
+go.work.sum
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# eBPF temporary files
+*.bpf.o
+*.bpf.c
+*.skel.h
+*.o
+
+# Demo recording files
+*.cast
+*.gif
+*.mp4
+*.webm
+screencast/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.suo
+*.user
+*.sln.docstates
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs and temporary data
+*.log
+*.tmp
+temp/
+tmp/
+*.dump
+*.prof
+*.pprof
+
+# Configuration with secrets (if any)
+config.local.yaml
+.env
+.env.local
+*.key
+*.pem
+*.crt
+
+# Documentation build
+docs/_build/
+site/
+
+# Release packages
+dist/
+build/
+*.tar.gz
+*.zip
+
+# Performance data
+perf.data
+perf.data.old
+flamegraph.svg
+
+# ClickHouse data (if local)
+clickhouse-data/
+
+# Grafana data (if local)
+grafana-data/

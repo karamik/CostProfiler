@@ -1,0 +1,38 @@
+name: TOTAL Release Pipeline
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: 📦 Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev linux-headers-$(uname -r)
+
+      - name: 🏗 Build Static Binary
+        run: |
+          # Собираем eBPF компоненты (если есть отдельный шаг генерации)
+          go generate ./...
+          
+          # Основная сборка: статический бинарник для Linux x86_64
+          CGO_ENABLED=1 go build -ldflags="-s -w" -o cost-profiler cmd/cost-profiler/main.go
+
+      - name: 🚀 Upload Artifacts to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: cost-profiler
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

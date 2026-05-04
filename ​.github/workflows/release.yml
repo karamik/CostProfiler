@@ -1,0 +1,41 @@
+name: TOTAL Release Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: 🏗 Isolated Build
+        run: |
+          # 1. Создаем чистую папку для сборки, чтобы папка ebpf не мешала
+          mkdir build_dir
+          cp main.go build_dir/
+          cd build_dir
+          
+          # 2. Вырезаем битый импорт, если он остался
+          sed -i '/"github.com\/karamik\/CostProfiler\/ebpf"/d' main.go
+          
+          # 3. Собираем бинарник в полной изоляции
+          go mod init cost-profiler
+          go build -o ../cost-profiler main.go
+
+      - name: 🚀 Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: cost-profiler
+          tag_name: v0.1.0-alpha
+          overwrite: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

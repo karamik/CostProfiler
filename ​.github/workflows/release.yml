@@ -1,0 +1,41 @@
+name: TOTAL Release Pipeline
+
+on:
+  workflow_dispatch: # Для запуска кнопкой
+  push:
+    tags:
+      - 'v*' # Для запуска при создании тега (например, v1.0)
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Важно для загрузки файлов в релиз
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: 🏗 Build Cost Profiler
+        run: |
+          go mod init cost-profiler || true
+          go mod tidy
+          # Собираем бинарник
+          go build -o cost-profiler main.go
+
+      - name: 🚀 Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: cost-profiler
+          # Если запускаем кнопкой, используем имя ветки или 'latest'
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          body: "Автоматическая сборка Cost Profiler (TOTAL Protocol)"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

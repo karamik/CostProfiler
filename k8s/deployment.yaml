@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cost-profiler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cost-profiler
+  template:
+    metadata:
+      labels:
+        app: cost-profiler
+    spec:
+      serviceAccountName: cost-profiler-sa
+      hostPID: true
+      containers:
+      - name: profiler
+        image: karamik/cost-profiler:latest
+        imagePullPolicy: Always
+        args:
+          - "--pod"
+          - "your-target-pod"        # замените на имя целевого пода
+          - "--namespace"
+          - "default"
+          - "--lang"
+          - "go"
+          - "--binary"
+          - "/app/service"           # путь внутри целевого контейнера
+          - "--web"
+          - ":8080"
+          - "--duration"
+          - "3600"
+        ports:
+        - containerPort: 8080
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: proc
+          mountPath: /proc
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: tmp
+        hostPath:
+          path: /tmp

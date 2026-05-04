@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cost Profiler - FinOps Dashboard</title>
+    <style>
+        body { font-family: monospace; background: #0a0a0f; color: #e2e8f0; padding: 2rem; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #334; padding: 8px; text-align: left; }
+        th { background: #1a1a2e; }
+        tr { background: #12121a; }
+        .red { color: #ff3366; }
+        .green { color: #00ff88; }
+        .yellow { color: #ffcc00; }
+        .inlined { color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>📊 Cost Profiler — FinOps Dashboard</h1>
+    <div id="lastUpdate">Обновление...</div>
+    <table id="metricsTable">
+        <thead>
+            <tr><th>Функция</th><th>Вызовов</th><th>CPU (мс)</th><th>₽/вызов</th><th>Затраты/год</th></tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <script>
+        async function fetchMetrics() {
+            const res = await fetch('/metrics');
+            const data = await res.json();
+            const tbody = document.querySelector('#metricsTable tbody');
+            tbody.innerHTML = '';
+            let total = 0;
+            for (const m of data) {
+                const row = tbody.insertRow();
+                const isInlined = m.Name.includes('(inlined)');
+                row.className = isInlined ? 'inlined' : '';
+                row.insertCell(0).textContent = m.Name;
+                row.insertCell(1).textContent = m.CallCount || '-';
+                row.insertCell(2).textContent = m.CallCount ? (m.TotalNS / m.CallCount / 1e6).toFixed(2) : '-';
+                row.insertCell(3).textContent = m.CostPerCall.toFixed(8);
+                const costCell = row.insertCell(4);
+                costCell.textContent = formatMoney(m.AnnualCost);
+                if (m.AnnualCost > 50_000_000) costCell.className = 'red';
+                else if (m.AnnualCost > 10_000_000) costCell.className = 'yellow';
+                else costCell.className = 'green';
+                total += m.AnnualCost;
+            }
+            document.getElementById('lastUpdate').innerHTML = `Последнее обновление: ${new Date().toLocaleTimeString()} | ИТОГО: ${formatMoney(total)}`;
+        }
+        function formatMoney(amount) {
+            if (amount >= 1e9) return (amount/1e9).toFixed(2) + ' млрд ₽';
+            if (amount >= 1e6) return (amount/1e6).toFixed(2) + ' млн ₽';
+            return amount.toFixed(0) + ' ₽';
+        }
+        fetchMetrics();
+        setInterval(fetchMetrics, 5000);
+    </script>
+</body>
+</html>

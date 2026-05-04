@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cost-profiler-service
+spec:
+  selector:
+    app: cost-profiler
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: web

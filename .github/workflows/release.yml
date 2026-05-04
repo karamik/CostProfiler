@@ -1,0 +1,40 @@
+name: TOTAL Release Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: 🏗 Isolated Build
+        run: |
+          # Полная изоляция от структуры репозитория
+          mkdir temp_build
+          cp main.go temp_build/
+          cd temp_build
+          sed -i '/"github.com\/karamik\/CostProfiler\/ebpf"/d' main.go
+          go mod init final-build
+          go build -o ../cost-profiler main.go
+
+      - name: 🚀 Force Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cost-profiler
+          tag_name: v0.9.9-final
+          name: "Final Check Build"
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true # Если файла нет - билд УПАДЕТ
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
